@@ -144,6 +144,7 @@ Patroni Nodes
 - [HAProxy routing configuration](configs/haproxy/haproxy.cfg.example)
 - [Patroni operational commands](commands/patroni.md)
 - [PostgreSQL replication commands](commands/postgresql.md)
+- [Failover and switchover runbook](docs/failover-and-switchover.md)
 
 ### Key Availability Capabilities
 
