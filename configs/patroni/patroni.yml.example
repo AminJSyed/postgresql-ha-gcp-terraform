@@ -1,0 +1,137 @@
+# Patroni configuration template for one PostgreSQL node.
+#
+# Copy this file to every database node and change:
+#   - name
+#   - restapi.connect_address
+#   - postgresql.connect_address
+#
+# Secrets must be injected at runtime using environment variables:
+#   PATRONI_RESTAPI_USERNAME
+#   PATRONI_RESTAPI_PASSWORD
+#   PATRONI_SUPERUSER_PASSWORD
+#   PATRONI_REPLICATION_PASSWORD
+#   PATRONI_REWIND_PASSWORD
+
+scope: postgresql-ha
+namespace: /service/
+name: patroni-node-1
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: 10.20.0.11:8008
+
+  # Restrict administrative REST API operations to the database subnet.
+  allowlist:
+    - 10.20.0.0/24
+
+  allowlist_include_members: true
+
+etcd3:
+  hosts:
+    - 10.20.0.21:2379
+    - 10.20.0.22:2379
+    - 10.20.0.23:2379
+
+  protocol: https
+  cacert: /etc/patroni/tls/ca.crt
+  cert: /etc/patroni/tls/patroni-etcd.crt
+  key: /etc/patroni/tls/patroni-etcd.key
+
+bootstrap:
+  dcs:
+    # Patroni leader-lock and health-check timings.
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+
+    # A replica with more than 1 MiB of lag is not eligible for failover.
+    maximum_lag_on_failover: 1048576
+
+    # Confirm that a candidate belongs to the expected PostgreSQL timeline.
+    check_timeline: true
+
+    # Start with asynchronous replication.
+    # This can later be changed through patronictl edit-config.
+    synchronous_mode: "off"
+    synchronous_mode_strict: false
+    synchronous_node_count: 1
+
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        wal_log_hints: "on"
+
+        max_connections: 200
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_keep_size: 512MB
+
+        password_encryption: scram-sha-256
+
+        log_connections: "on"
+        log_disconnections: "on"
+        log_lock_waits: "on"
+        log_checkpoints: "on"
+        deadlock_timeout: 1s
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - local all all peer
+    - hostssl all all 10.20.0.0/24 scram-sha-256
+    - hostssl replication replicator 10.20.0.0/24 scram-sha-256
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: 10.20.0.11:5432
+
+  data_dir: /var/lib/postgresql/16/main
+  bin_dir: /usr/lib/postgresql/16/bin
+  pgpass: /var/lib/postgresql/.pgpass
+
+  authentication:
+    superuser:
+      username: postgres
+
+    replication:
+      username: replicator
+
+    rewind:
+      username: rewind_user
+
+  parameters:
+    unix_socket_directories: /var/run/postgresql
+
+    ssl: "on"
+    ssl_cert_file: /etc/patroni/tls/postgresql.crt
+    ssl_key_file: /etc/patroni/tls/postgresql.key
+    ssl_ca_file: /etc/patroni/tls/ca.crt
+
+  create_replica_methods:
+    - basebackup
+
+  basebackup:
+    checkpoint: fast
+    max-rate: 100M
+
+watchdog:
+  mode: automatic
+  device: /dev/watchdog
+  safety_margin: 5
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+  sync_priority: 100
+
+log:
+  level: INFO
+  format: "%(asctime)s %(levelname)s: %(message)s"

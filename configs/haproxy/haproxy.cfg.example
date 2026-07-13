@@ -1,0 +1,83 @@
+# HAProxy configuration for a three-node Patroni PostgreSQL cluster.
+#
+# Endpoints:
+#   5432 - Read/write traffic routed to the current PostgreSQL primary
+#   5433 - Read-only traffic distributed across healthy replicas
+#   7000 - Local-only HAProxy statistics page
+#
+# Patroni REST API:
+#   8008 - Role-aware health checks
+
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+
+    user haproxy
+    group haproxy
+
+    maxconn 4096
+
+    # Administrative UNIX socket for runtime inspection.
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+
+defaults
+    log global
+    mode tcp
+
+    option tcplog
+    option dontlognull
+
+    timeout connect 5s
+    timeout client 30m
+    timeout server 30m
+    timeout check 5s
+
+# Stable read/write endpoint for applications.
+frontend postgresql_write
+    bind 0.0.0.0:5432
+    default_backend patroni_primary
+
+# Only the node whose Patroni /primary endpoint returns HTTP 200
+# is eligible to receive read/write traffic.
+backend patroni_primary
+    mode tcp
+
+    option httpchk GET /primary
+    http-check expect status 200
+
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+
+    server patroni-node-1 10.20.0.11:5432 check port 8008
+    server patroni-node-2 10.20.0.12:5432 check port 8008
+    server patroni-node-3 10.20.0.13:5432 check port 8008
+
+# Optional read-only endpoint for reporting and read-heavy workloads.
+frontend postgresql_read
+    bind 0.0.0.0:5433
+    default_backend patroni_replicas
+
+# Only healthy PostgreSQL replicas whose /replica endpoint returns
+# HTTP 200 are included in the read-only backend.
+backend patroni_replicas
+    mode tcp
+    balance roundrobin
+
+    option httpchk GET /replica
+    http-check expect status 200
+
+    default-server inter 3s fall 3 rise 2
+
+    server patroni-node-1 10.20.0.11:5432 check port 8008
+    server patroni-node-2 10.20.0.12:5432 check port 8008
+    server patroni-node-3 10.20.0.13:5432 check port 8008
+
+# Bind the statistics interface only to localhost.
+# Administrators can access it through an SSH tunnel.
+listen statistics
+    bind 127.0.0.1:7000
+    mode http
+
+    stats enable
+    stats uri /stats
+    stats refresh 10s

@@ -1,0 +1,58 @@
+# etcd configuration template for a three-member cluster.
+#
+# This file represents etcd member 1.
+#
+# Change the following values on each member:
+#   - name
+#   - listen-peer-urls
+#   - listen-client-urls
+#   - initial-advertise-peer-urls
+#   - advertise-client-urls
+#   - member-specific TLS certificate and key paths
+#
+# Member layout:
+#   etcd-1: 10.20.0.21
+#   etcd-2: 10.20.0.22
+#   etcd-3: 10.20.0.23
+
+name: etcd-1
+data-dir: /var/lib/etcd
+
+# Peer traffic is used for communication between etcd members.
+listen-peer-urls: https://10.20.0.21:2380
+initial-advertise-peer-urls: https://10.20.0.21:2380
+
+# Client traffic is used by Patroni, etcdctl, and monitoring clients.
+listen-client-urls: https://10.20.0.21:2379,https://127.0.0.1:2379
+advertise-client-urls: https://10.20.0.21:2379
+
+# Static bootstrap configuration for the initial three-member cluster.
+initial-cluster: etcd-1=https://10.20.0.21:2380,etcd-2=https://10.20.0.22:2380,etcd-3=https://10.20.0.23:2380
+initial-cluster-token: postgresql-ha-etcd
+initial-cluster-state: new
+
+# Client-to-etcd TLS.
+client-cert-auth: true
+trusted-ca-file: /etc/etcd/tls/ca.crt
+cert-file: /etc/etcd/tls/etcd-server.crt
+key-file: /etc/etcd/tls/etcd-server.key
+
+# TLS authentication between etcd cluster members.
+peer-client-cert-auth: true
+peer-trusted-ca-file: /etc/etcd/tls/ca.crt
+peer-cert-file: /etc/etcd/tls/etcd-peer.crt
+peer-key-file: /etc/etcd/tls/etcd-peer.key
+
+# Raft timing values are expressed in milliseconds.
+heartbeat-interval: 100
+election-timeout: 1000
+
+# Local snapshot and WAL retention.
+snapshot-count: 10000
+max-snapshots: 5
+max-wals: 5
+
+logger: zap
+log-level: info
+log-outputs:
+  - stderr

@@ -92,6 +92,74 @@ flowchart TB
 └── .github/workflows/  Terraform validation workflows
 ```
 
+## Self-Managed PostgreSQL HA Reference Implementation
+
+The self-managed architecture demonstrates how PostgreSQL high availability can be implemented on Google Compute Engine using Patroni, etcd, and HAProxy.
+
+### Architecture Components
+
+| Component | Responsibility |
+|---|---|
+| PostgreSQL | Database engine, WAL generation, and streaming replication |
+| Patroni | Cluster orchestration, leader election, failover, and switchover |
+| etcd | Distributed configuration store and leader-lock coordination |
+| HAProxy | Stable read/write and read-only database endpoints |
+| Terraform | Google Cloud infrastructure provisioning and configuration |
+| Google Compute Engine | Runtime platform for database and coordination nodes |
+
+### Traffic and Replication Flow
+
+```text
+Application
+    |
+    v
+HAProxy
+    |
+    +---- Read/write endpoint :5432
+    |         |
+    |         v
+    |    Current PostgreSQL Primary
+    |
+    +---- Read-only endpoint :5433
+              |
+              v
+        Healthy PostgreSQL Replicas
+
+PostgreSQL Primary
+    |
+    +---- WAL streaming replication ----> Replica 1
+    |
+    +---- WAL streaming replication ----> Replica 2
+
+Patroni Nodes
+    |
+    +---- Leader election and cluster state ----> etcd quorum
+```
+
+### Reference Files
+
+- [Patroni HA architecture](architecture/patroni-ha.md)
+- [Patroni configuration template](configs/patroni/patroni.yml.example)
+- [etcd configuration template](configs/etcd/etcd.yml.example)
+- [HAProxy routing configuration](configs/haproxy/haproxy.cfg.example)
+- [Patroni operational commands](commands/patroni.md)
+- [PostgreSQL replication commands](commands/postgresql.md)
+
+### Key Availability Capabilities
+
+- Three-node PostgreSQL topology
+- Automatic primary election
+- PostgreSQL streaming replication
+- Planned switchover
+- Automatic or controlled failover
+- Replica reinitialization
+- Timeline recovery using `pg_rewind`
+- Role-aware HAProxy health checks
+- Three-member etcd quorum
+- TLS-protected database and DCS communication
+- Replication-lag and WAL monitoring
+- Backup and point-in-time recovery design
+
 ## Deployment Models
 
 ### Cloud SQL for PostgreSQL
